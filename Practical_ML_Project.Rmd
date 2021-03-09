@@ -1,0 +1,175 @@
+---
+title: "Practical_ML"
+author: "Chandar"
+date: "March 9, 2021"
+output: html_document
+---
+
+# Background
+People regularly do exercise is quantify how  much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+The goal of this project is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The information about the data (Velloso et al., 2013) is available in the following website: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+## Data reading
+```{r}
+library(caret)
+
+train = read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+test = read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+
+dim(train)
+dim(test)
+summary(train[15:25])    # printing summary for only few variables in the train dataset
+```
+
+The given train data contains 19622 observations, while the test data contains 20 observations While we build a predictive model with this data, we need to split the train data into two set - training set (70%) and validation set (30%), so that overfitting issue will not occur.
+
+## Splitting Train set into two - training set and validation set 
+
+```{r}
+set.seed(123) # setting seed to make sure the reproducibility of the result
+
+train_index <- createDataPartition(y = train$classe, p = 0.70, list = FALSE)
+train_set <- train[train_index,]
+valid_set <- train[-train_index,]
+
+dim(train)
+dim(train_set)
+dim(valid_set)
+```
+
+
+## Data Cleaning Process
+Going by the summary of the data, we can see that most of the variables are having NAs and blanks for more number of observations, which will not be helpful for modeling and prediction. Hence, we need to exclude those variables having more number of NA's and blanks before we get into modeling part. 
+
+```{r}
+# for instance, we can check the summary of a variable 'max_picth_belt'
+summary(train_set[19])
+mean(is.na(train_set[19]))
+```
+
+This clearly indicates that nearly 98% of the cases are having NA's in this variable 'max_picth_belt'. Therefore, we can use sapply() function to ignore those variables having NA's for more than 95% of the cases, so that we can have at least 686 observations (13737*0.05=686.85) for training the model.
+
+
+```{r}
+NA_pct = sapply(train_set, function(x) mean(is.na(x))) > 0.95
+table(NA_pct)
+length(NA_pct[NA_pct=='FALSE'])
+
+# Now we need to remove those variables having NAs for more than 95% of th cases
+train_set<- train_set[, NA_pct==FALSE]
+valid_set<- valid_set[, NA_pct==FALSE]
+dim(train_set)
+dim(valid_set)
+```
+
+
+We can see that the number of variables has been reduced from 160 to 93 by removing variables containing 95% or more NAs. However, we should remove the number of variables further by checking with the variation in the values of each variable and remove those variables having very least variation. That is, we should remove variables having zero variance using the function "nearZeroVar()" in the "train_set".
+
+```{r}
+zero_var <- nearZeroVar(train_set)
+
+train_set_f <- train_set[,-zero_var]
+valid_set_f <- valid_set[,-zero_var]
+
+dim(train_set_f)
+dim(valid_set_f)
+names(train_set_f)
+
+# Also, we need to drop the first 5 variables which are not required for modeling as they are like index variables 
+train_set_final <- train_set_f[,-(1:5)]
+valid_set_final <- valid_set_f[,-(1:5)]
+
+```
+Now we left with only 54 variables including the dependent variable 'classe'. This cleaned data is a healthy data and can be used for model building. Since the dependent variable 'classe' is a categorical one, we can use one of the following three methods: 'random forest', 'gbm', and 'lda'. In this case, we can try random forest, decision tree, and gbm, and the corresponding results can be compared. 
+
+# Model Building (Random Forest, Decision Tree, and Gradient Boosting Algorithm)
+
+```{r}
+set.seed(1234)
+
+#Random Forest
+library(randomForest)
+
+rf_fit <- randomForest(classe ~., data=train_set_final, importance=TRUE, method="class")
+rf_pred <- predict(rf_fit, newdata = valid_set_final)
+cm_rf <- confusionMatrix(rf_pred, valid_set_final$classe)
+cm_rf$overall['Accuracy']    
+
+rf_pred_test <- predict(rf_fit, newdata=test, type = "class")
+table(rf_pred_test)
+
+
+#Decision Tree
+library(rpart)
+dt_fit <- rpart(classe ~ ., data=train_set_final, method="class")
+
+library(rattle)
+fancyRpartPlot(dt_fit)
+
+dt_pred <- predict(dt_fit, newdata=valid_set_final, type = "class")
+head(dt_pred)
+cm_dt = confusionMatrix(valid_set_final$classe, dt_pred)
+cm_dt
+cm_dt$overall['Accuracy']
+
+dt_pred_test <- predict(dt_fit, newdata=test, type = "class")
+table(dt_pred_test)
+
+
+# GBM
+library(gbm)
+gbm_fit <- gbm(classe ~.,
+               data = train_set_final,             
+               cv.folds = 3,
+               shrinkage = .01,
+               n.minobsinnode = 10,
+               n.trees = 200, verbose=FALSE)
+
+gbm_pred <- data.frame(predict(gbm_fit,  newdata=valid_set_final, type="response"))
+
+max(gbm_pred[2,])
+
+pred_gbm <- as.factor(ifelse(gbm_pred[1]>0.5, 1,
+                             ifelse(gbm_pred[2]>0.5, 2,
+                                    ifelse(gbm_pred[3]>0.5, 3,
+                                           ifelse(gbm_pred[4]>0.5, 4, 5)))))
+
+dat = cbind(valid_actual=valid_set_final$classe, valid_pred = pred_gbm)
+cm_boost = confusionMatrix(as.factor(dat[,1]), as.factor(dat[,2]))
+cm_boost$overall['Accuracy'] 
+
+gbm_pred_test <- predict(gbm_fit, newdata=test, type = "response")
+test_pred_gbm <- as.factor(ifelse(gbm_pred_test[1]>0.5, 1,
+                                  ifelse(gbm_pred_test[2]>0.5, 2,
+                                         ifelse(gbm_pred_test[3]>0.5, 3,
+                                                ifelse(gbm_pred_test[4]>0.5, 4, 5)))))
+
+table(test_pred_gbm)
+
+```
+
+### Conlcusion:
+From the above results, we have 
+  1. Accuracy of the model by random forest = 0.9981308 
+  2. Accuracy of the model by decision tree = 0.8273577
+  3. Accuracy of the model by gradient boosting algorithm (gbm) = 0.3039932
+
+By comparing the above results, we see that the accuracy for gbm is 0.30, which is very low compared to random forest and decision tree. Also, the accuracy for the random forest model is greater than that of decision tree and gradient boosting algorithm. Hence, we conclude that random forest is best in classifying the labels of the target variable classe (A: Exactly according to the specification, B: Throwing the elbows to the front, C: Lifting the dumbbell only halfway, D: Lowering the dumbbell only halfway, and E: Throwing the hips to the front). Using the final model obtained by each of the three methods, the class has been predicted for the test data of size 20. We can use the one predicted by Random Forest model. The distribution of the predicted label by random forest is as follows: 
+
+```{r, echo=FALSE}
+rf_pred_dist = data.frame(table(rf_pred_test))
+rf_pred_dist$pct = rf_pred_dist$Freq/20
+rf_pred_dist
+```
+According to test data prediction by random forest, it is very clear that majority of the subjects will do either A:Exactly according to the specification (35%) or B: Throwing the elbows to the front (40%). 
+
+
+
+### Reference: 
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+
