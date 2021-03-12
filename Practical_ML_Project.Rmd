@@ -2,7 +2,7 @@
 title: "Practical_ML"
 author: "Chandar"
 date: "March 9, 2021"
-output: html_document
+output: pdf_document
 ---
 
 # Background
@@ -99,7 +99,7 @@ cm_rf <- confusionMatrix(rf_pred, valid_set_final$classe)
 cm_rf$overall['Accuracy']    
 
 rf_pred_test <- predict(rf_fit, newdata=test, type = "class")
-table(rf_pred_test)
+rf_pred_test
 
 
 #Decision Tree
@@ -116,7 +116,7 @@ cm_dt
 cm_dt$overall['Accuracy']
 
 dt_pred_test <- predict(dt_fit, newdata=test, type = "class")
-table(dt_pred_test)
+dt_pred_test
 
 
 # GBM
@@ -147,7 +147,7 @@ test_pred_gbm <- as.factor(ifelse(gbm_pred_test[1]>0.5, 1,
                                          ifelse(gbm_pred_test[3]>0.5, 3,
                                                 ifelse(gbm_pred_test[4]>0.5, 4, 5)))))
 
-table(test_pred_gbm)
+test_pred_gbm
 
 ```
 
@@ -157,15 +157,13 @@ From the above results, we have
   2. Accuracy of the model by decision tree = 0.8273577
   3. Accuracy of the model by gradient boosting algorithm (gbm) = 0.3039932
 
-By comparing the above results, we see that the accuracy for gbm is 0.30, which is very low compared to random forest and decision tree. Also, the accuracy for the random forest model is greater than that of decision tree and gradient boosting algorithm. Hence, we conclude that random forest is best in classifying the labels of the target variable classe (A: Exactly according to the specification, B: Throwing the elbows to the front, C: Lifting the dumbbell only halfway, D: Lowering the dumbbell only halfway, and E: Throwing the hips to the front). Using the final model obtained by each of the three methods, the class has been predicted for the test data of size 20. We can use the one predicted by Random Forest model. The distribution of the predicted label by random forest is as follows: 
+By comparing the above results, we see that the accuracy for gbm is 0.30, which is very low compared to random forest and decision tree. Also, the accuracy for the random forest model is greater than that of decision tree and gradient boosting algorithm. Hence, we conclude that random forest is best in classifying the labels of the target variable classe (A: Exactly according to the specification, B: Throwing the elbows to the front, C: Lifting the dumbbell only halfway, D: Lowering the dumbbell only halfway, and E: Throwing the hips to the front). Using the final model obtained by each of the three methods, the class has been predicted for the test data of size 20. We can use the one predicted by Random Forest model. The predicted values of classe for the 20 rows of the test dataset by random forest is given as follows: 
 
+### Predicted values/labels for the test set of size 20 using Random Forest Model:
 ```{r, echo=FALSE}
-rf_pred_dist = data.frame(table(rf_pred_test))
-rf_pred_dist$pct = rf_pred_dist$Freq/20
-rf_pred_dist
+rf_pred_test <- predict(rf_fit, newdata=test, type = "class")
+rf_pred_test
 ```
-According to test data prediction by random forest, it is very clear that majority of the subjects will do either A:Exactly according to the specification (35%) or B: Throwing the elbows to the front (40%). 
-
 
 
 ### Reference: 
